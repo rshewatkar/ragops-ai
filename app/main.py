@@ -10,7 +10,7 @@ class QueryRequest(BaseModel):
 
 @app.get("/")
 def home():
-    return {"message": "RAGOps AI is running 🚀"}
+    return {"message": "RAGOps AI API is running 🚀"}
 
 @app.post("/ask")
 def ask_question(request: QueryRequest):
