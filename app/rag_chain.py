@@ -15,8 +15,8 @@ def load_and_chunk_pdf(file_path: str):
 
     # Split into chunks
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=300,
-        chunk_overlap=50
+        chunk_size=200,
+        chunk_overlap=30
     )
 
     chunks = text_splitter.split_documents(documents)
@@ -33,8 +33,8 @@ def create_vector_store(file_path: str):
 
     # Split into chunks
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=300,
-        chunk_overlap=50
+        chunk_size=200,
+        chunk_overlap=30
     )
     chunks = text_splitter.split_documents(documents)
 
@@ -85,13 +85,26 @@ def ask_rag(query: str):
     )
 
     # Retrieve relevant chunks
-    docs = db.similarity_search(query, k=3)
+    docs = db.similarity_search(query, k=4)
 
     context = "\n\n".join([doc.page_content for doc in docs])
+    print("\n=== CONTEXT SENT TO LLM ===\n")
+    print(context)
+    
+    for i, doc in enumerate(docs):
+        print(f"\n--- Retrieved Chunk {i+1} ---\n")
+        print(doc.page_content)
 
     # Create prompt
     prompt = f"""
-    Answer the question based only on the context below.
+    You are a strict assistant answering questions from a resume.
+
+    Answer ONLY from the provided context.
+    If the answer is not in the context, say:
+    "I don't know based on the provided document."
+
+    DO NOT make up information.
+    DO NOT add examples or stories.
 
     Context:
     {context}
@@ -101,7 +114,6 @@ def ask_rag(query: str):
 
     Answer:
     """
-
     # Call Ollama
     response = requests.post(
         "http://localhost:11434/api/generate",
