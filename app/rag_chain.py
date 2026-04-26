@@ -1,3 +1,5 @@
+import requests
+
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
@@ -69,3 +71,46 @@ def search_query(query: str):
     for i, doc in enumerate(results):
         print(f"\n--- Result {i+1} ---\n")
         print(doc.page_content)
+        
+
+def ask_rag(query: str):
+    # Load embeddings + DB
+    embeddings = HuggingFaceEmbeddings(
+        model_name="all-MiniLM-L6-v2"
+    )
+
+    db = Chroma(
+        persist_directory="db",
+        embedding_function=embeddings
+    )
+
+    # Retrieve relevant chunks
+    docs = db.similarity_search(query, k=3)
+
+    context = "\n\n".join([doc.page_content for doc in docs])
+
+    # Create prompt
+    prompt = f"""
+    Answer the question based only on the context below.
+
+    Context:
+    {context}
+
+    Question:
+    {query}
+
+    Answer:
+    """
+
+    # Call Ollama
+    response = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": "phi",
+            "prompt": prompt,
+            "stream": False,
+            "option":{"temperature":0}
+        }
+    )
+
+    return response.json()["response"]
