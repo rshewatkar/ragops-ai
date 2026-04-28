@@ -1,31 +1,23 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import requests
+from app.rag_chain import ask_rag
 
-app = FastAPI(title= "RAGOps AI API")
+app = FastAPI()
 
-# Request body schema
+# Request schema
 class QueryRequest(BaseModel):
-    question: str
+    query: str
 
+# Root endpoint
 @app.get("/")
 def home():
-    return {"message": "RAGOps AI API is running 🚀"}
+    return {"message": "RAG API is running"}
 
+# RAG endpoint
 @app.post("/ask")
 def ask_question(request: QueryRequest):
-    response = requests.post(
-        "http://localhost:11434/api/generate",
-        json={
-            "model": "phi",
-            "prompt": request.question,
-            "stream": False
-        }
-    )
-
-    result = response.json()["response"]
-
+    answer = ask_rag(request.query)
     return {
-        "question": request.question,
-        "answer": result
+        "query": request.query,
+        "answer": answer
     }

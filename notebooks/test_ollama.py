@@ -3,9 +3,11 @@ import requests
 response = requests.post(
     "http://localhost:11434/api/generate",
     json={
-        "model": "phi",   # 👈 use this
+        "model": "tinyllama",   
         "prompt": "Explain AI simply",
-        "stream": False
+        "stream": False,
+        "options": {
+            "temperature": 0}
     }
 )
 

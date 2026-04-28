@@ -97,28 +97,31 @@ def ask_rag(query: str):
 
     # Create prompt
     prompt = f"""
-    You are a strict assistant answering questions from a resume.
+    You are a strict information extraction system.
 
-    Answer ONLY from the provided context.
-    If the answer is not in the context, say:
-    "I don't know based on the provided document."
+    Extract ONLY the exact skills mentioned in the context.
 
-    DO NOT make up information.
-    DO NOT add examples or stories.
+    Rules:
+    - Do NOT add any new skills
+    - Do NOT assume anything
+    - Do NOT include tools not explicitly written
+    - If only Python and SQL are present, return only those
+    - Answer in bullet points
 
     Context:
     {context}
-
+    
     Question:
     {query}
-
+    
     Answer:
-    """
+    """    
+    
     # Call Ollama
     response = requests.post(
         "http://localhost:11434/api/generate",
         json={
-            "model": "phi",
+            "model": "tinyllama",
             "prompt": prompt,
             "stream": False,
             "option":{"temperature":0}
