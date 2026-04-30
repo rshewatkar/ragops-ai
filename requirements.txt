@@ -1,0 +1,10 @@
+streamlit
+fastapi
+uvicorn
+pydantic
+requests
+langchain
+langchain-community
+chromadb
+sentence-transformers
+pypdf

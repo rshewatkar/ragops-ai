@@ -1,3 +1,13 @@
+import os
+import warnings
+
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+warnings.filterwarnings(
+    "ignore",
+    message=r".*Accessing `__path__` from .*",
+    module="transformers.*",
+)
+
 import requests
 
 from langchain_community.document_loaders import PyPDFLoader
@@ -57,6 +67,39 @@ def create_vector_store(file_path: str):
 
     return vector_db
 
+# Hugging Face Setup (SECURE)
+
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://router.huggingface.co/v1",
+    api_key=os.getenv("HF_TOKEN"),
+)
+
+def call_llm(prompt: str):
+    try:
+        completion = client.chat.completions.create(
+            model="deepseek-ai/DeepSeek-V4-Pro:fastest",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a strict information extraction system. Only answer using given context."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            temperature=0
+        )
+
+        return completion.choices[0].message.content.strip()
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+
 # Search 
 def search_query(query: str):
     embeddings = HuggingFaceEmbeddings(
@@ -68,12 +111,47 @@ def search_query(query: str):
         embedding_function=embeddings
     )
 
-    results = db.similarity_search(query, k=3)
+    results = db.similarity_search(query +"resume skills", k=4)
 
     for i, doc in enumerate(results):
         print(f"\n--- Result {i+1} ---\n")
         print(doc.page_content)
         
+
+def _unique_lines(lines):
+    seen = set()
+    unique = []
+    for line in lines:
+        line = line.strip()
+        if not line or line in seen:
+            continue
+        seen.add(line)
+        unique.append(line)
+    return unique
+
+
+def _extract_matching_lines(context: str, keywords):
+    matches = []
+    for line in context.splitlines():
+        line_lower = line.lower()
+        if any(keyword in line_lower for keyword in keywords):
+            matches.append(line)
+    return _unique_lines(matches)
+
+
+def _first_context_lines(context: str, limit: int = 5):
+    lines = _unique_lines(context.splitlines())
+    return "\n".join(lines[:limit]) if lines else "Not found"
+
+
+def _context_fallback(context: str):
+    lines = _unique_lines(context.splitlines())
+    useful_lines = [
+        line for line in lines
+        if len(line) > 20 and not line.lower().startswith(("page ", "http"))
+    ]
+    return "\n".join(useful_lines[:4]) if useful_lines else "Not found"
+
 
 # Main RAG Function
 def ask_rag(query: str):
@@ -87,84 +165,82 @@ def ask_rag(query: str):
         embedding_function=embeddings
     )
 
+    query_lower = query.lower()
+
+    retrieval_query = query
+    if any(keyword in query_lower for keyword in ["skill", "librar", "technology", "tools"]):
+        retrieval_query = (
+            f"{query} technical skills programming languages machine learning "
+            "ML libraries tools frameworks resume"
+        )
+
     # Retrieve relevant chunks
-    docs = db.similarity_search(query, k=4)
+    docs = db.similarity_search(retrieval_query, k=6)
     
     # Remove duplicate chunks
-    unique_docs = list(set([doc.page_content.strip() for doc in docs]))
-    context = "\n\n".join(unique_docs[:2])
+    unique_docs = _unique_lines([doc.page_content for doc in docs])
+    context = "\n\n".join(unique_docs[:6])
 
     print("\n=== CONTEXT SENT TO LLM ===\n")
     print(context)
     
-    lines = context.split("\n")
- 
-
     # SIMPLE RULE-BASED EXTRACTION
+    if any(keyword in query_lower for keyword in ["who is", "about rahul", "summary", "profile"]):
+        return _first_context_lines(context)
 
-
-    if "skills" in query.lower():
-        lines = context.split("\n")
-        skills = []
-        for line in lines:
-            if any (keyword in line.lower() for keyword in [
-                "python", "SQL", "machine Learnign", "scikit","xgboost", "pandas","numpy" 
-                ]):       
-                    skills.append(line.strip())
+    if "skill" in query_lower:
+        skills = _extract_matching_lines(context, [
+            "skills", "programming", "python", "sql", "machine learning",
+            "scikit", "xgboost", "h2o", "tensorflow", "pandas", "numpy",
+            "power bi", "tableau", "excel", "flask", "fastapi", "mlflow",
+            "docker", "github", "git"
+        ])
         if skills:
-            return "\n".join(set(skills))[:300]
+            return "\n".join(skills)[:500]
+        else:
+            return "Not found"
 
+    elif "education" in query_lower:
+        edu = _extract_matching_lines(context, [
+            "engineering", "diploma", "university", "bachelor", "education"
+        ])
+        return "\n".join(set(edu)) if edu else "Not found"
 
-    elif "education" in query.lower():
-       lines = context.split("\n")
-       edu = [line.strip() for line in lines if "Engineering" in line or "Diploma" in line]
-       return "\n".join(set(edu))[:300]
-       if edu:
-           return "\n".joint(set(edu))[:300]
-    
-    elif "libraries" in query.lower():
-       lines = context.split("\n")
-       libs = [line.strip() for line in lines if "Scikit" in line or "Tensor" in line or "NumPy" in line]
-       return "\n".join(set(libs))[:300]
-       if libs:
-           return "\n".join(set(libs))[:300]
+    elif "librar" in query_lower:
+        libs = _extract_matching_lines(context, [
+            "ml libraries", "scikit", "xgboost", "h2o", "tensorflow", "pandas", "numpy"
+        ])
+        return "\n".join(set(libs)) if libs else "Not found" 
 
+        
     # Create prompt
     prompt = f"""
-        
+    Extract answer from the context.
+
+    Rules:
+    - Only use context
+    - No explanation
+    - No extra words
+    - If not found: Not found
+
     Context:
     {context}
     
     Question:
     {query}
     
-    Final Answer:
+    Answer:
     """     
-                     
-    # CALL OLLAMA
-    
-    response = requests.post(
-        "http://localhost:11434/api/generate",
-        json={
-            "model": "tinyllama",
-            "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": 0}
-        }
-    )
+    answer = call_llm(prompt)
 
-    result = response.json()
+    # Cleanup
+    answer = answer.replace("Answer:", "").strip()
 
-    
-    # SAFE PARSE
-    
-    answer = result.get("response", "").strip()
+    # Safety fallback
+    if not answer or "error" in answer.lower():
+        return _context_fallback(context)
 
-    
-    # CLEAN OUTPUT
-    
-    bad_phrases = ["Sure", "Here", "I can", "assistant", "AI"]
-    for phrase in bad_phrases:
-        answer = answer.replace(phrase, "")
+    return answer                 
 
+  
    
