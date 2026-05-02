@@ -98,25 +98,27 @@ def call_llm(prompt: str):
     except Exception as e:
         return f"Error: {str(e)}"
 
+def clean_output(answer: str):
+    if not answer:
+        return "Not found"
 
+    # remove junk words
+    bad_words = [
+        "sure", "here", "answer", "assistant",
+        "based on", "the context", ":"
+    ]
 
-# Search 
-#def search_query(query: str):
-#    embeddings = HuggingFaceEmbeddings(
-#        model_name="all-MiniLM-L6-v2"
-#    )
-#
-#    db = Chroma(
-#        persist_directory="db",
-#        embedding_function=embeddings
-#    )
-#
-#    results = db.similarity_search(query +"resume skills", k=4)
-#
-#    for i, doc in enumerate(results):
-#        print(f"\n--- Result {i+1} ---\n")
-#        print(doc.page_content)
-        
+    answer = answer.lower()
+
+    for word in bad_words:
+        answer = answer.replace(word, "")
+
+    # remove extra spaces
+    answer = " ".join(answer.split())
+
+    # limit length
+    return answer.strip()[:300] if answer else "Not found"
+
 
 def unique_lines(lines):
     seen = set()
@@ -205,13 +207,21 @@ def ask_rag(query: str):
     # LLM FALLBACK
     
     prompt = f"""
-    Extract answer strictly from context.
-
-    Rules:
-    - No explanation
-    - No extra words
-    - If not found → Not found
-
+    You are an information extraction system.
+    
+    STRICT RULES:
+    - Answer ONLY using the context
+    - DO NOT add any explanation
+    - DO NOT rephrase the question
+    - DO NOT include sentences like "Here is", "Sure", etc.
+    - Return short, clean output only
+    - If answer not found → return exactly: Not found
+    
+    FORMAT RULES:
+    - For skills → return comma-separated list
+    - For education → return degree names only
+    - For libraries → return list only
+    
     Context:
     {context}
     
@@ -219,9 +229,9 @@ def ask_rag(query: str):
     {query}
     
     Answer:
-    """
-
+    """                                                
     answer = call_llm(prompt)
+    answer = clean_output(answer)
 
     if not answer or "error" in answer.lower():
         return "Not found"
