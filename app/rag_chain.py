@@ -79,7 +79,8 @@ client = OpenAI(
 def call_llm(prompt: str):
     try:
         completion = client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-V4-Pro:fastest",
+            model="deepseek-ai/DeepSeek-V4-Pro:novita",          
+
             messages=[
                 {
                     "role": "system",
@@ -146,21 +147,24 @@ def extract_lines(context, keywords):
 # 🚀 MAIN RAG
 # =========================
 def ask_rag(query: str):
-    
+    if mlflow.active_run():
+        return _ask_rag(query)
+
     with mlflow.start_run():
-        
-        #log input
-        mlflow.lod_param("query",query)
-    
-        embeddings = HuggingFaceEmbeddings(
+        return _ask_rag(query)
+
+
+def _ask_rag(query: str):
+    # log input
+    mlflow.log_param("query", query)
+
+    embeddings = HuggingFaceEmbeddings(
         model_name="all-MiniLM-L6-v2"
     )
-
     db = Chroma(
         persist_directory="db",
         embedding_function=embeddings
     )
-
     query_lower = query.lower()
 
     # 🔥 QUERY IMPROVEMENT
@@ -185,7 +189,7 @@ def ask_rag(query: str):
         query_type = "general"
     
     # Log retrival config
-    mlflow.log_param("retrival_k", k)
+    mlflow.log_param("retrieval_k", k)
     mlflow.log_param("query_type", query_type)
     
 
@@ -273,103 +277,3 @@ def ask_rag(query: str):
         return "Not found"
 
     return answer.strip()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
