@@ -7,7 +7,7 @@ warnings.filterwarnings(
     message=r".*Accessing `__path__` from .*",
     module="transformers.*",
 )
-
+import mlflow
 import requests
 
 from langchain_community.document_loaders import PyPDFLoader
@@ -146,8 +146,13 @@ def extract_lines(context, keywords):
 # 🚀 MAIN RAG
 # =========================
 def ask_rag(query: str):
-
-    embeddings = HuggingFaceEmbeddings(
+    
+    with mlflow.start_run():
+        
+        #log input
+        mlflow.lod_param("query",query)
+    
+        embeddings = HuggingFaceEmbeddings(
         model_name="all-MiniLM-L6-v2"
     )
 
@@ -162,15 +167,27 @@ def ask_rag(query: str):
     if "skill" in query_lower:
         retrieval_query = query + " skills programming languages ML tools"
         k = 6
+        query_type = "skills"
+        
     elif "education" in query_lower:
         retrieval_query = query + " education degree university"
         k = 4
+        query_type = "education"
+        
     elif "librar" in query_lower:
         retrieval_query = query + " machine learning libraries python"
         k = 5
+        query_type ="libraries"
+    
     else:
         retrieval_query = query
         k = 4
+        query_type = "general"
+    
+    # Log retrival config
+    mlflow.log_param("retrival_k", k)
+    mlflow.log_param("query_type", query_type)
+    
 
     # 🔍 RETRIEVE
     docs = db.similarity_search(retrieval_query, k=k)
@@ -189,19 +206,34 @@ def ask_rag(query: str):
             "scikit", "xgboost", "tensorflow",
             "pandas", "numpy", "mlflow", "docker", "git"
         ])
-        return "\n".join(skills) if skills else "Not found"
+        answer = "\n".join(skills) if skills else "Not found"
+        
+        mlflow.log_param("response_type", "rule-based")
+        mlflow.log_param("output_length", len(answer))
+        
+        return answer    
 
     if "education" in query_lower:
         edu = extract_lines(context, [
             "engineering", "diploma", "university", "bachelor"
         ])
-        return "\n".join(edu) if edu else "Not found"
+        answer = "\n".join(edu) if edu else "Not found"
+        
+        mlflow.log_param("response_type", "rule-based")
+        mlflow.log_param("output_length", len(answer))
+        
+        return answer
 
     if "librar" in query_lower:
         libs = extract_lines(context, [
             "scikit", "xgboost", "tensorflow", "pandas", "numpy"
         ])
-        return "\n".join(libs) if libs else "Not found"
+        answer =  "\n".join(libs) if libs else "Not found"
+    
+        mlflow.log_param("response_type", "rule-based")
+        mlflow.log_param("output_length", len(answer))
+        
+        return answer
 
     
     # LLM FALLBACK
@@ -232,6 +264,10 @@ def ask_rag(query: str):
     """                                                
     answer = call_llm(prompt)
     answer = clean_output(answer)
+    
+    # Log LL usage
+    mlflow.log_param("response_type","llm")
+    mlflow.log_param("output_length", len(answer))
 
     if not answer or "error" in answer.lower():
         return "Not found"
