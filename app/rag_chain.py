@@ -8,6 +8,9 @@ warnings.filterwarnings(
     module="transformers.*",
 )
 import mlflow
+mlflow.set_tracking_uri("http://127.0.0.1:5000")
+mlflow.set_experiment("rag-experiment")
+
 import requests
 
 from langchain_community.document_loaders import PyPDFLoader
@@ -146,17 +149,21 @@ def extract_lines(context, keywords):
 # =========================
 # 🚀 MAIN RAG
 # =========================
-def ask_rag(query: str):
+def ask_rag(query: str, chat_history=None):
     if mlflow.active_run():
-        return _ask_rag(query)
+        return _ask_rag(query, chat_history)
 
     with mlflow.start_run():
-        return _ask_rag(query)
-
-
-def _ask_rag(query: str):
+        return _ask_rag(query, chat_history)
+    
+def _ask_rag(query: str, chat_history=None):
     # log input
     mlflow.log_param("query", query)
+    mlflow.log_param("prompt_version", "v2_resume_assistant")
+    mlflow.log_param("chunk_size", 200)
+    mlflow.log_param("chunk_overlap", 30)
+    mlflow.log_param("embedding_model", "all-MiniLM-L6-v2")
+    mlflow.log_param("llm_model", "deepseek-ai/DeepSeek-V4-Pro:novita")
 
     embeddings = HuggingFaceEmbeddings(
         model_name="all-MiniLM-L6-v2"
@@ -165,29 +172,52 @@ def _ask_rag(query: str):
         persist_directory="db",
         embedding_function=embeddings
     )
+    history_text = ""
+
+    if chat_history:
+        last_turns = chat_history[-4:]  # last 2 Q&A
+        for role, msg in last_turns:
+            history_text += f"{role}: {msg}\n"
+    
     query_lower = query.lower()
 
-    # 🔥 QUERY IMPROVEMENT
-    if "skill" in query_lower:
-        retrieval_query = query + " skills programming languages ML tools"
+    # QUERY 
+    
+    if any(k in query_lower for k in ["skill", "technology", "tools"]):
+        retrieval_query = query + " resume skills programming languages ML tools"
         k = 6
         query_type = "skills"
-        
-    elif "education" in query_lower:
+    
+    elif any(k in query_lower for k in ["education", "degree"]):
         retrieval_query = query + " education degree university"
         k = 4
         query_type = "education"
-        
-    elif "librar" in query_lower:
+    
+    elif any(k in query_lower for k in ["librar", "framework"]):
         retrieval_query = query + " machine learning libraries python"
         k = 5
-        query_type ="libraries"
+        query_type = "libraries"
+    
+    elif any(k in query_lower for k in ["experience", "work", "internship"]):
+        retrieval_query = query + " work experience company role internship"
+        k = 6
+        query_type = "experience"
+    
+    elif any(k in query_lower for k in ["project", "built", "developed"]):
+        retrieval_query = query + " projects machine learning built developed"
+        k = 6
+        query_type = "projects"
+    
+    elif any(k in query_lower for k in ["profile", "about", "who is", "summary"]):
+        retrieval_query = query + " resume summary profile about candidate"
+        k = 5
+        query_type = "profile"
     
     else:
         retrieval_query = query
         k = 4
         query_type = "general"
-    
+                                                                               
     # Log retrival config
     mlflow.log_param("retrieval_k", k)
     mlflow.log_param("query_type", query_type)
@@ -214,7 +244,10 @@ def _ask_rag(query: str):
         
         mlflow.log_param("response_type", "rule-based")
         mlflow.log_param("output_length", len(answer))
-        
+        mlflow.log_metric("answer_length", len(answer))
+        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
+
+
         return answer    
 
     if "education" in query_lower:
@@ -225,7 +258,10 @@ def _ask_rag(query: str):
         
         mlflow.log_param("response_type", "rule-based")
         mlflow.log_param("output_length", len(answer))
-        
+        mlflow.log_metric("answer_length", len(answer))
+        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
+
+
         return answer
 
     if "librar" in query_lower:
@@ -236,44 +272,90 @@ def _ask_rag(query: str):
     
         mlflow.log_param("response_type", "rule-based")
         mlflow.log_param("output_length", len(answer))
-        
-        return answer
+        mlflow.log_metric("answer_length", len(answer))
+        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
 
+
+        return answer
+    
+    # PROFILE / SUMMARY
+    if any(k in query_lower for k in ["profile", "about", "who is", "summary"]):
+        lines = unique_lines(context.split("\n"))
+        answer = "\n".join(lines[:5]) if lines else "Not found"
+    
+        mlflow.log_param("response_type", "rule-based")
+        mlflow.log_param("output_length", len(answer))
+        mlflow.log_metric("answer_length", len(answer))
+        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
+
+
+        return answer
+    
+    
+    # EXPERIENCE
+    if any(k in query_lower for k in ["experience", "work", "internship"]):
+        exp = extract_lines(context, [
+            "experience", "intern", "company", "worked", "role"
+        ])
+        answer = "\n".join(exp) if exp else "Not found"
+    
+        mlflow.log_param("response_type", "rule-based")
+        mlflow.log_param("output_length", len(answer))
+        mlflow.log_metric("answer_length", len(answer))
+        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
+
+
+        return answer
+    
+    
+    # PROJECTS
+    if "project" in query_lower:
+        proj = extract_lines(context, [
+            "project", "built", "developed", "model", "system"
+        ])
+        answer = "\n".join(proj) if proj else "Not found"
+    
+        mlflow.log_param("response_type", "rule-based")
+        mlflow.log_param("output_length", len(answer))
+        mlflow.log_metric("answer_length", len(answer))
+        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
+
+
+        return answer
     
     # LLM FALLBACK
     
     prompt = f"""
-    You are an information extraction system.
+    You are a helpful AI assistant answering questions about a candidate's resume.
     
-    STRICT RULES:
-    - Answer ONLY using the context
-    - DO NOT add any explanation
-    - DO NOT rephrase the question
-    - DO NOT include sentences like "Here is", "Sure", etc.
-    - Return short, clean output only
-    - If answer not found → return exactly: Not found
-    
-    FORMAT RULES:
-    - For skills → return comma-separated list
-    - For education → return degree names only
-    - For libraries → return list only
+    Conversation History:
+    {history_text}
     
     Context:
     {context}
     
-    Question:
+    User Question:
     {query}
     
+    Rules:
+    - Answer ONLY from context
+    - Be concise but clear
+    - If not found → say "Not found"
+    - Do NOT hallucinate
+    
     Answer:
-    """                                                
+    """  
+                                   
     answer = call_llm(prompt)
     answer = clean_output(answer)
     
     # Log LL usage
     mlflow.log_param("response_type","llm")
     mlflow.log_param("output_length", len(answer))
+    mlflow.log_metric("answer_length", len(answer))
+    mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
 
     if not answer or "error" in answer.lower():
-        return "Not found"
-
-    return answer.strip()
+        return context[:300]
+    
+    

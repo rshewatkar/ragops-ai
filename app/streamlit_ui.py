@@ -2,36 +2,99 @@ import streamlit as st
 
 try:
     from rag_chain import ask_rag
-except ModuleNotFoundError as exc:
-    if exc.name != "rag_chain":
-        raise
+except ModuleNotFoundError:
     from app.rag_chain import ask_rag
 
-# page config
+# PAGE CONFIG
+
 st.set_page_config(
-    page_title = "RAG Resume Assistant",
-    page_icon = "📃",
-    layout = "centered"
+    page_title="AI Resume Assistant",
+    page_icon="📄",
+    layout="centered"
 )
 
-#Title
-st.title("📃 RAG Resume Assistance")
-st.markdown("Ask questions about Rahuls's resume")
+# HEADER
+st.markdown("""
+<h1 style='text-align: center;'>📄 AI Resume Assistant</h1>
+<p style='text-align: center; color: gray;'>
+Ask anything about Rahul's profile, skills, experience, or projects
+</p>
+""", unsafe_allow_html=True)
 
-# Input Box
-query = st.text_input("🫡Enter your Questions:")
+st.divider()
 
-# Button
-if st.button("🔍Ask"):
-    if query.strip() == "":
-         st.warning("Please enter a question")
-    else:
-        with st.spinner("Thinking.."):
-            answer = ask_rag(query)
-            
-        st.success("answer:")
-        st.write(answer)
+# INPUT SECTION
+query = st.text_input(
+    "🔍 Search resume",
+    placeholder="e.g. What are his skills? What projects has he built?"
+)
 
-# Footer
-st.markdown("---") 
-st.caption("Built with ❤️ using RAG + FastAPI + Streamlit")
+col1, col2 = st.columns([1,1])
+
+with col1:
+    ask_btn = st.button("Ask")
+
+with col2:
+    clear_btn = st.button("Clear")
+
+# SESSION STATE
+if "answer" not in st.session_state:
+    st.session_state.answer = ""
+
+if "last_query" not in st.session_state:
+    st.session_state.last_query = ""
+
+# ACTIONS
+if ask_btn and query:
+    with st.spinner("Thinking..."):
+        answer = ask_rag(query)
+        st.session_state.answer = answer
+        st.session_state.last_query = query
+
+if clear_btn:
+    st.session_state.answer = ""
+    st.session_state.last_query = ""
+
+# OUTPUT SECTION
+if st.session_state.answer:
+    st.markdown("### 📌 Result")
+
+    st.markdown(f"""
+    <div style="
+        background-color:#f9f9f9;
+        padding:15px;
+        border-radius:10px;
+        border:1px solid #ddd;
+    ">
+        <b>Query:</b> {st.session_state.last_query} <br><br>
+        <b>Answer:</b><br>
+        {st.session_state.answer}
+    </div>
+    """, unsafe_allow_html=True)
+
+# SUGGESTED QUESTIONS
+st.divider()
+
+st.markdown("### 💡 Try these:")
+
+suggestions = [
+    "What are his skills?",
+    "What is his experience?",
+    "What projects has he built?",
+    "Tell me about his profile",
+    "Which ML libraries does he know?"
+]
+
+cols = st.columns(2)
+
+for i, q in enumerate(suggestions):
+    if cols[i % 2].button(q):
+        with st.spinner("Thinking..."):
+            answer = ask_rag(q)
+            st.session_state.answer = answer
+            st.session_state.last_query = q
+
+# FOOTER
+st.divider()
+
+st.caption("Built with RAG + FastAPI + MLflow | Rahul Shewatkar")
