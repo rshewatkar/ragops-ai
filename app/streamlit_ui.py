@@ -91,8 +91,9 @@ for i, q in enumerate(suggestions):
     if cols[i % 2].button(q):
         with st.spinner("Thinking..."):
             answer = ask_rag(q)
-            st.session_state.answer = answer
             st.session_state.last_query = q
+            st.session_state.answer = answer
+            st.rerun()
 
 # FOOTER
 st.divider()
