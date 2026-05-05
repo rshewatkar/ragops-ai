@@ -9,7 +9,7 @@ warnings.filterwarnings(
 )
 import mlflow
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
-mlflow.set_experiment("rag-experiment")
+mlflow.set_experiment("ragops-ai")
 
 import requests
 
@@ -100,7 +100,8 @@ def call_llm(prompt: str):
         return completion.choices[0].message.content.strip()
 
     except Exception as e:
-        return f"Error: {str(e)}"
+        print("LLM Error:",e)
+        return ""
 
 def clean_output(answer: str):
     if not answer:
@@ -145,6 +146,18 @@ def extract_lines(context, keywords):
 
     return unique_lines(matches)
 
+def relevance_score(query, context):
+    query_words = set(query.lower().split())
+    context_words = set(context.lower().split())
+    overlap = query_words.intersection(context_words)
+    return round(len(overlap) / (len(query_words) + 1), 3)
+
+
+def answer_coverage(answer, context):
+    answer_words = set(answer.lower().split())
+    context_words = set(context.lower().split())
+    overlap = answer_words.intersection(context_words)
+    return round(len(overlap) / (len(answer_words) + 1), 3)
 
 # =========================
 # 🚀 MAIN RAG
@@ -230,10 +243,17 @@ def _ask_rag(query: str, chat_history=None):
 
     print("\n=== CONTEXT ===\n")
     print(context)
+    
+    # EVALUATION METRICS 
 
-    # =========================
-    # ⚡ RULE-BASED FAST PATH
-    # =========================
+    mlflow.log_metric("num_chunks", len(docs))
+
+    rel_score = relevance_score(query, context)
+    mlflow.log_metric("context_relevance", rel_score)     
+    
+    
+    # RULE-BASED FAST PATH
+    
     if "skill" in query_lower:
         skills = extract_lines(context, [
             "python", "sql", "machine learning",
@@ -243,10 +263,10 @@ def _ask_rag(query: str, chat_history=None):
         answer = "\n".join(skills) if skills else "Not found"
         
         mlflow.log_param("response_type", "rule-based")
-        mlflow.log_param("output_length", len(answer))
+        mlflow.log_metric("output_length", len(answer))
         mlflow.log_metric("answer_length", len(answer))
         mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-
+        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
 
         return answer    
 
@@ -257,10 +277,10 @@ def _ask_rag(query: str, chat_history=None):
         answer = "\n".join(edu) if edu else "Not found"
         
         mlflow.log_param("response_type", "rule-based")
-        mlflow.log_param("output_length", len(answer))
+        mlflow.log_metric("output_length", len(answer))
         mlflow.log_metric("answer_length", len(answer))
         mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-
+        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
 
         return answer
 
@@ -271,10 +291,10 @@ def _ask_rag(query: str, chat_history=None):
         answer =  "\n".join(libs) if libs else "Not found"
     
         mlflow.log_param("response_type", "rule-based")
-        mlflow.log_param("output_length", len(answer))
+        mlflow.log_metric("output_length", len(answer))
         mlflow.log_metric("answer_length", len(answer))
         mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-
+        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
 
         return answer
     
@@ -284,10 +304,10 @@ def _ask_rag(query: str, chat_history=None):
         answer = "\n".join(lines[:5]) if lines else "Not found"
     
         mlflow.log_param("response_type", "rule-based")
-        mlflow.log_param("output_length", len(answer))
+        mlflow.log_metric("output_length", len(answer))
         mlflow.log_metric("answer_length", len(answer))
         mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-
+        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
 
         return answer
     
@@ -300,10 +320,10 @@ def _ask_rag(query: str, chat_history=None):
         answer = "\n".join(exp) if exp else "Not found"
     
         mlflow.log_param("response_type", "rule-based")
-        mlflow.log_param("output_length", len(answer))
+        mlflow.log_metric("output_length", len(answer))
         mlflow.log_metric("answer_length", len(answer))
         mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-
+        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
 
         return answer
     
@@ -316,10 +336,10 @@ def _ask_rag(query: str, chat_history=None):
         answer = "\n".join(proj) if proj else "Not found"
     
         mlflow.log_param("response_type", "rule-based")
-        mlflow.log_param("output_length", len(answer))
+        mlflow.log_metric("output_length", len(answer))
         mlflow.log_metric("answer_length", len(answer))
         mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-
+        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
 
         return answer
     
@@ -351,11 +371,13 @@ def _ask_rag(query: str, chat_history=None):
     
     # Log LL usage
     mlflow.log_param("response_type","llm")
-    mlflow.log_param("output_length", len(answer))
+    mlflow.log_metric("output_length", len(answer))
     mlflow.log_metric("answer_length", len(answer))
     mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
+    mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
 
     if not answer or "error" in answer.lower():
-        return context[:300]
+        return "Not Found"
     
+    return answer.strip()
     
