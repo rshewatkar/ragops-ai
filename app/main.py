@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from app.rag_chain import ask_rag
 
-app = FastAPI()
+app = FastAPI(title="RAG Resume Assistant API")
 
 # Request schema
 class QueryRequest(BaseModel):

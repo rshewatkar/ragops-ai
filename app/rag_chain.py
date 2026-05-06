@@ -147,11 +147,17 @@ def extract_lines(context, keywords):
     return unique_lines(matches)
 
 def relevance_score(query, context):
-    query_words = set(query.lower().split())
-    context_words = set(context.lower().split())
-    overlap = query_words.intersection(context_words)
-    return round(len(overlap) / (len(query_words) + 1), 3)
+    stopwords = {"what", "is", "are", "his", "her", "the", "a", "an", "of", "to"}
 
+    query_words = set(query.lower().split()) - stopwords
+    context_words = set(context.lower().split())
+
+    overlap = query_words.intersection(context_words)
+
+    if not query_words:
+        return 0.0
+
+    return round(len(overlap) / len(query_words), 3)
 
 def answer_coverage(answer, context):
     answer_words = set(answer.lower().split())
