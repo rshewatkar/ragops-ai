@@ -165,9 +165,9 @@ def answer_coverage(answer, context):
     overlap = answer_words.intersection(context_words)
     return round(len(overlap) / (len(answer_words) + 1), 3)
 
-# =========================
-# 🚀 MAIN RAG
-# =========================
+
+# MAIN RAG
+
 def ask_rag(query: str, chat_history=None):
     if mlflow.active_run():
         return _ask_rag(query, chat_history)

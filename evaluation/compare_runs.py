@@ -8,9 +8,8 @@ EXPERIMENT_NAME = "ragops-ai"
 CSV_OUTPUT_PATH = "rag_experiments.csv"
 
 
-# =========================
-# 📥 GET RUNS
-# =========================
+# GET RUNS
+
 def get_runs():
     runs = mlflow.search_runs(
         experiment_names=[EXPERIMENT_NAME]
@@ -18,9 +17,8 @@ def get_runs():
     return runs
 
 
-# =========================
-# 🧠 SCORING FUNCTION
-# =========================
+# SCORING FUNCTION
+
 def score_run(row):
     relevance = row.get("metrics.context_relevance", 0)
     coverage = row.get("metrics.answer_coverage", 0)
@@ -36,9 +34,8 @@ def score_run(row):
 
     return round(score, 3)
 
-# =========================
-# 🏆 BEST RUN
-# =========================
+# BEST RUN
+
 def get_best_run():
     runs = get_runs()
 
@@ -52,9 +49,8 @@ def get_best_run():
     return best_run, runs
 
 
-# =========================
-# 📊 PRINT BEST CONFIG
-# =========================
+# PRINT BEST CONFIG
+
 def print_best_config():
     best, _ = get_best_run()
 
@@ -72,9 +68,8 @@ def print_best_config():
     print("Score:", best.get("score"))
 
 
-# =========================
-# 💾 EXPORT RUNS
-# =========================
+# EXPORT RUNS
+
 def export_runs(path=CSV_OUTPUT_PATH):
     runs = get_runs()
 
@@ -88,9 +83,8 @@ def export_runs(path=CSV_OUTPUT_PATH):
     return path
 
 
-# =========================
-# 🚀 MAIN
-# =========================
+# MAIN
+
 if __name__ == "__main__":
     output_path = export_runs()
     print(f"\n✅ Saved runs to: {output_path}")
