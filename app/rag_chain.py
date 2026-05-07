@@ -1,4 +1,5 @@
 import os
+import re
 import warnings
 
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
@@ -148,6 +149,10 @@ def extract_lines(context, keywords):
 
 def relevance_score(query, context):
     stopwords = {"what", "is", "are", "his", "her", "the", "a", "an", "of", "to"}
+    
+    # Remove punctuation
+    query = re.sub(r"[^\w\s]", "", query.lower())
+    context = re.sub(r"[^\w\s]", "", context.lower())
 
     query_words = set(query.lower().split()) - stopwords
     context_words = set(context.lower().split())
