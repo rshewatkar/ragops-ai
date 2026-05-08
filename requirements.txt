@@ -1,10 +1,12 @@
-streamlit
 fastapi
 uvicorn
-pydantic
-requests
 langchain
 langchain-community
 chromadb
 sentence-transformers
+huggingface_hub
+openai
 pypdf
+mlflow
+streamlit
+requests
