@@ -9,13 +9,13 @@ warnings.filterwarnings(
     module="transformers.*",
 )
 import mlflow
-mlflow.set_tracking_uri("http://127.0.0.1:5000")
+mlflow.set_tracking_uri("http://host.docker.internal:5000")
 mlflow.set_experiment("ragops-ai")
 
 import requests
 
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
@@ -391,4 +391,3 @@ def _ask_rag(query: str, chat_history=None):
         return "Not Found"
     
     return answer.strip()
-    

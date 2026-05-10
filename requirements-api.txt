@@ -7,6 +7,8 @@ sentence-transformers
 huggingface_hub
 openai
 pypdf
-mlflow
-streamlit
 requests
+mlflow
+torch==2.2.2
+numpy==1.26.4
+transformers==4.36.2

@@ -1,0 +1,12 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+venv
+mlflow-env
+db
+mlruns
+rag_experiments.csv
+.env
