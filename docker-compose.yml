@@ -1,0 +1,33 @@
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.12.1
+    container_name: mlflow-server
+
+    ports:
+      - "5000:5000"
+
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:5000/ || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  ragops-api:
+    build: .
+
+    container_name: ragops-api
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+
+    depends_on:
+      - mlflow

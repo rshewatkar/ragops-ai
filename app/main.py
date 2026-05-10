@@ -39,7 +39,7 @@ def ask_question(request: QueryRequest):
         #Track latency
         latency = round(time.time()  - start_time, 3)
         
-        mlflow.log_metrci("response_time_sec", latency)
+        mlflow.log_metric("response_time_sec", latency)
         
         return {
         "query": request.query,

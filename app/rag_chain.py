@@ -9,7 +9,7 @@ warnings.filterwarnings(
     module="transformers.*",
 )
 import mlflow
-mlflow.set_tracking_uri("http://host.docker.internal:5000")
+mlflow.set_tracking_uri("http://mlflow:5000")
 mlflow.set_experiment("ragops-ai")
 
 import requests
