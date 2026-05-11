@@ -1,8 +1,23 @@
-mlruns
-venv/
+# Python
 __pycache__/
 *.pyc
-.env
-*.log
-notebooks/.ipynb_checkpoints
+
+# Virtual env
+venv/
+mlflow-env/
+
+# MLflow
+mlruns/
+
+# ChromaDB
 db/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+.env
+
+# OS
+.DS_Store
+Thumbs.db
