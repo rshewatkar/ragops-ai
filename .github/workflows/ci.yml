@@ -37,9 +37,21 @@ jobs:
     # Step 4: Run basic import test
     - name: Run App Test
       run: |
-        python -c "import fastapi, mlflow, chromadb, langchain"
+        python -c "import fastapi"
+        python -c "import mlflow"
+        python -c "import chromadb"
+        python -c "import langchain"
+        python -c "import streamlit"
 
     # Step 5: Build Docker Image
     - name: Build Docker Image
       run: |
         docker build -t ragops-ai .
+    
+     # =========================
+      # Build Streamlit Docker Image
+      # =========================
+
+    - name: Build Streamlit Docker Image
+      run: |
+        docker build -f Dockerfile.streamlit -t ragops-streamlit .
