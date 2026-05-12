@@ -1,6 +1,8 @@
 services:
+
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.12.1
+
     container_name: mlflow-server
 
     ports:
@@ -11,15 +13,10 @@ services:
       --host 0.0.0.0
       --port 5000
 
-    healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:5000/ || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 15s
-
   ragops-api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
 
     container_name: ragops-api
 
@@ -31,3 +28,19 @@ services:
 
     depends_on:
       - mlflow
+
+  streamlit-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+
+    container_name: streamlit-ui
+
+    ports:
+      - "8501:8501"
+
+    environment:
+      - API_URL=http://ragops-api:8000
+
+    depends_on:
+      - ragops-api

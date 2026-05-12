@@ -1,77 +1,42 @@
 import os
 import re
+import threading
 import warnings
 
+# =========================
+# ENV + WARNINGS
+# =========================
+
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+
 warnings.filterwarnings(
     "ignore",
     message=r".*Accessing `__path__` from .*",
     module="transformers.*",
 )
+
+# =========================
+# MLFLOW
+# =========================
+
 import mlflow
+
 mlflow.set_tracking_uri("http://mlflow:5000")
 mlflow.set_experiment("ragops-ai")
 
-import requests
+# =========================
+# LANGCHAIN IMPORTS
+# =========================
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 
-# Load + chunk PDF
-def load_and_chunk_pdf(file_path: str):
-    # Load PDF
-    loader = PyPDFLoader(file_path)
-    documents = loader.load()
-
-    print(f"Loaded {len(documents)} pages")
-
-    # Split into chunks
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=200,
-        chunk_overlap=30
-    )
-
-    chunks = text_splitter.split_documents(documents)
-
-    print(f"Created {len(chunks)} chunks")
-
-    return chunks
-
-# creat Vector DB
-def create_vector_store(file_path: str):
-    # Load PDF
-    loader = PyPDFLoader(file_path)
-    documents = loader.load()
-
-    # Split into chunks
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=200,
-        chunk_overlap=30
-    )
-    chunks = text_splitter.split_documents(documents)
-
-    print(f"Created {len(chunks)} chunks")
-
-    # Create embeddings
-    embeddings = HuggingFaceEmbeddings(
-        model_name="all-MiniLM-L6-v2"
-    )
-
-    # Store in ChromaDB
-    vector_db = Chroma.from_documents(
-        documents=chunks,
-        embedding=embeddings,
-        persist_directory="db"
-    )
-
-    print("Vector DB created successfully")
-
-    return vector_db
-
-# Hugging Face Setup (SECURE)
+# =========================
+# OPENAI CLIENT
+# =========================
 
 from openai import OpenAI
 
@@ -80,82 +45,194 @@ client = OpenAI(
     api_key=os.getenv("HF_TOKEN"),
 )
 
+# =========================
+# GLOBAL SINGLETONS
+# =========================
+
+_VECTOR_STORE = None
+_EMBEDDINGS = None
+
+_LOCK = threading.Lock()
+
+# =========================
+# HELPERS
+# =========================
+
+
+def get_db_path():
+    return os.getenv(
+        "CHROMA_DB_DIR",
+        "/app/db" if os.path.exists("/app/db") else os.path.abspath("db")
+    )
+
+
+def get_embeddings():
+    global _EMBEDDINGS
+
+    if _EMBEDDINGS is None:
+        with _LOCK:
+            if _EMBEDDINGS is None:
+
+                print("Loading embedding model...")
+
+                _EMBEDDINGS = HuggingFaceEmbeddings(
+                    model_name="sentence-transformers/all-MiniLM-L6-v2"
+                )
+
+    return _EMBEDDINGS
+
+
+def get_vector_store():
+    global _VECTOR_STORE
+
+    if _VECTOR_STORE is None:
+        with _LOCK:
+            if _VECTOR_STORE is None:
+
+                print("Loading ChromaDB...")
+
+                _VECTOR_STORE = Chroma(
+                    persist_directory=get_db_path(),
+                    embedding_function=get_embeddings()
+                )
+
+    return _VECTOR_STORE
+
+
+# =========================
+# PDF CHUNKING
+# =========================
+
+def load_and_chunk_pdf(file_path: str):
+
+    loader = PyPDFLoader(file_path)
+
+    documents = loader.load()
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200
+    )
+
+    chunks = splitter.split_documents(documents)
+
+    print(f"Loaded {len(documents)} pages")
+    print(f"Created {len(chunks)} chunks")
+
+    return chunks
+
+
+# =========================
+# CREATE VECTOR STORE
+# =========================
+
+def create_vector_store(file_path: str):
+
+    chunks = load_and_chunk_pdf(file_path)
+
+    vector_db = Chroma.from_documents(
+        documents=chunks,
+        embedding=get_embeddings(),
+        persist_directory=get_db_path()
+    )
+
+    print("Vector DB created successfully")
+
+    return vector_db
+
+
+# =========================
+# LLM
+# =========================
+
 def call_llm(prompt: str):
+
     try:
+
         completion = client.chat.completions.create(
-            model="deepseek-ai/DeepSeek-V4-Pro:novita",          
+            model="deepseek-ai/DeepSeek-V4-Pro:novita",
 
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a strict information extraction system. Only answer using given context."
+                    "content": """
+You are an AI Resume Assistant.
+
+Rules:
+- Answer professionally
+- Use bullet points when needed
+- Keep answers concise
+- Answer ONLY from context
+- Do not hallucinate
+- If answer not found say: Not found
+"""
                 },
                 {
                     "role": "user",
                     "content": prompt
                 }
             ],
-            temperature=0
+
+            temperature=0,
+            max_tokens=300
         )
 
         return completion.choices[0].message.content.strip()
 
     except Exception as e:
-        print("LLM Error:",e)
-        return ""
+
+        print("LLM ERROR:", e)
+
+        return "Not found"
+
+
+# =========================
+# CLEAN OUTPUT
+# =========================
 
 def clean_output(answer: str):
+
     if not answer:
         return "Not found"
 
-    # remove junk words
-    bad_words = [
-        "sure", "here", "answer", "assistant",
-        "based on", "the context", ":"
-    ]
+    answer = re.sub(r"\s+", " ", answer)
 
-    answer = answer.lower()
+    return answer.strip()
 
-    for word in bad_words:
-        answer = answer.replace(word, "")
 
-    # remove extra spaces
-    answer = " ".join(answer.split())
-
-    # limit length
-    return answer.strip()[:300] if answer else "Not found"
-
+# =========================
+# UTILS
+# =========================
 
 def unique_lines(lines):
+
     seen = set()
     result = []
+
     for line in lines:
+
         line = line.strip()
+
         if line and line not in seen:
             seen.add(line)
             result.append(line)
+
     return result
 
 
-def extract_lines(context, keywords):
-    lines = context.split("\n")
-    matches = []
-
-    for line in lines:
-        if any(k in line.lower() for k in keywords):
-            matches.append(line.strip())
-
-    return unique_lines(matches)
-
 def relevance_score(query, context):
-    stopwords = {"what", "is", "are", "his", "her", "the", "a", "an", "of", "to"}
-    
-    # Remove punctuation
+
+    stopwords = {
+        "what", "is", "are", "his",
+        "her", "the", "a", "an",
+        "of", "to"
+    }
+
     query = re.sub(r"[^\w\s]", "", query.lower())
     context = re.sub(r"[^\w\s]", "", context.lower())
 
-    query_words = set(query.lower().split()) - stopwords
-    context_words = set(context.lower().split())
+    query_words = set(query.split()) - stopwords
+    context_words = set(context.split())
 
     overlap = query_words.intersection(context_words)
 
@@ -164,230 +241,126 @@ def relevance_score(query, context):
 
     return round(len(overlap) / len(query_words), 3)
 
-def answer_coverage(answer, context):
-    answer_words = set(answer.lower().split())
-    context_words = set(context.lower().split())
-    overlap = answer_words.intersection(context_words)
-    return round(len(overlap) / (len(answer_words) + 1), 3)
 
-
+# =========================
 # MAIN RAG
+# =========================
 
 def ask_rag(query: str, chat_history=None):
+
     if mlflow.active_run():
         return _ask_rag(query, chat_history)
 
     with mlflow.start_run():
         return _ask_rag(query, chat_history)
-    
+
+
 def _ask_rag(query: str, chat_history=None):
-    # log input
-    mlflow.log_param("query", query)
-    mlflow.log_param("prompt_version", "v2_resume_assistant")
-    mlflow.log_param("chunk_size", 200)
-    mlflow.log_param("chunk_overlap", 30)
-    mlflow.log_param("embedding_model", "all-MiniLM-L6-v2")
-    mlflow.log_param("llm_model", "deepseek-ai/DeepSeek-V4-Pro:novita")
 
-    embeddings = HuggingFaceEmbeddings(
-        model_name="all-MiniLM-L6-v2"
-    )
-    db = Chroma(
-        persist_directory="db",
-        embedding_function=embeddings
-    )
-    history_text = ""
-
-    if chat_history:
-        last_turns = chat_history[-4:]  # last 2 Q&A
-        for role, msg in last_turns:
-            history_text += f"{role}: {msg}\n"
-    
     query_lower = query.lower()
 
-    # QUERY 
-    
-    if any(k in query_lower for k in ["skill", "technology", "tools"]):
-        retrieval_query = query + " resume skills programming languages ML tools"
+    # =========================
+    # MLFLOW LOGGING
+    # =========================
+
+    mlflow.log_param("query", query)
+    mlflow.log_param("embedding_model", "all-MiniLM-L6-v2")
+    mlflow.log_param("llm_model", "deepseek-ai/DeepSeek-V4-Pro:novita")
+    mlflow.log_param("chunk_size", 1000)
+    mlflow.log_param("chunk_overlap", 200)
+
+    # =========================
+    # QUERY ROUTING
+    # =========================
+
+    k = 4
+
+    if "skill" in query_lower:
+        retrieval_query = query + " skills technologies tools"
         k = 6
-        query_type = "skills"
-    
-    elif any(k in query_lower for k in ["education", "degree"]):
+
+    elif "experience" in query_lower:
+        retrieval_query = query + " experience internship work"
+        k = 6
+
+    elif "project" in query_lower:
+        retrieval_query = query + " projects machine learning"
+        k = 6
+
+    elif "education" in query_lower:
         retrieval_query = query + " education degree university"
         k = 4
-        query_type = "education"
-    
-    elif any(k in query_lower for k in ["librar", "framework"]):
-        retrieval_query = query + " machine learning libraries python"
-        k = 5
-        query_type = "libraries"
-    
-    elif any(k in query_lower for k in ["experience", "work", "internship"]):
-        retrieval_query = query + " work experience company role internship"
-        k = 6
-        query_type = "experience"
-    
-    elif any(k in query_lower for k in ["project", "built", "developed"]):
-        retrieval_query = query + " projects machine learning built developed"
-        k = 6
-        query_type = "projects"
-    
-    elif any(k in query_lower for k in ["profile", "about", "who is", "summary"]):
-        retrieval_query = query + " resume summary profile about candidate"
-        k = 5
-        query_type = "profile"
-    
+
     else:
         retrieval_query = query
-        k = 4
-        query_type = "general"
-                                                                               
-    # Log retrival config
-    mlflow.log_param("retrieval_k", k)
-    mlflow.log_param("query_type", query_type)
-    
 
-    # 🔍 RETRIEVE
+    mlflow.log_param("retrieval_k", k)
+
+    # =========================
+    # VECTOR SEARCH
+    # =========================
+
+    db = get_vector_store()
+
     docs = db.similarity_search(retrieval_query, k=k)
 
-    context = "\n\n".join(unique_lines([doc.page_content for doc in docs]))
+    context = "\n\n".join(
+        unique_lines([doc.page_content for doc in docs])
+    )
 
-    print("\n=== CONTEXT ===\n")
-    print(context)
-    
-    # EVALUATION METRICS 
+    # =========================
+    # METRICS
+    # =========================
 
     mlflow.log_metric("num_chunks", len(docs))
 
     rel_score = relevance_score(query, context)
-    mlflow.log_metric("context_relevance", rel_score)     
-    
-    
-    # RULE-BASED FAST PATH
-    
-    if "skill" in query_lower:
-        skills = extract_lines(context, [
-            "python", "sql", "machine learning",
-            "scikit", "xgboost", "tensorflow",
-            "pandas", "numpy", "mlflow", "docker", "git"
-        ])
-        answer = "\n".join(skills) if skills else "Not found"
-        
-        mlflow.log_param("response_type", "rule-based")
-        mlflow.log_metric("output_length", len(answer))
-        mlflow.log_metric("answer_length", len(answer))
-        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
 
-        return answer    
+    mlflow.log_metric("context_relevance", rel_score)
 
-    if "education" in query_lower:
-        edu = extract_lines(context, [
-            "engineering", "diploma", "university", "bachelor"
-        ])
-        answer = "\n".join(edu) if edu else "Not found"
-        
-        mlflow.log_param("response_type", "rule-based")
-        mlflow.log_metric("output_length", len(answer))
-        mlflow.log_metric("answer_length", len(answer))
-        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
+    # =========================
+    # PROMPT
+    # =========================
 
-        return answer
+    history_text = ""
 
-    if "librar" in query_lower:
-        libs = extract_lines(context, [
-            "scikit", "xgboost", "tensorflow", "pandas", "numpy"
-        ])
-        answer =  "\n".join(libs) if libs else "Not found"
-    
-        mlflow.log_param("response_type", "rule-based")
-        mlflow.log_metric("output_length", len(answer))
-        mlflow.log_metric("answer_length", len(answer))
-        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
+    if chat_history:
 
-        return answer
-    
-    # PROFILE / SUMMARY
-    if any(k in query_lower for k in ["profile", "about", "who is", "summary"]):
-        lines = unique_lines(context.split("\n"))
-        answer = "\n".join(lines[:5]) if lines else "Not found"
-    
-        mlflow.log_param("response_type", "rule-based")
-        mlflow.log_metric("output_length", len(answer))
-        mlflow.log_metric("answer_length", len(answer))
-        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
+        last_turns = chat_history[-4:]
 
-        return answer
-    
-    
-    # EXPERIENCE
-    if any(k in query_lower for k in ["experience", "work", "internship"]):
-        exp = extract_lines(context, [
-            "experience", "intern", "company", "worked", "role"
-        ])
-        answer = "\n".join(exp) if exp else "Not found"
-    
-        mlflow.log_param("response_type", "rule-based")
-        mlflow.log_metric("output_length", len(answer))
-        mlflow.log_metric("answer_length", len(answer))
-        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
+        for role, msg in last_turns:
+            history_text += f"{role}: {msg}\n"
 
-        return answer
-    
-    
-    # PROJECTS
-    if "project" in query_lower:
-        proj = extract_lines(context, [
-            "project", "built", "developed", "model", "system"
-        ])
-        answer = "\n".join(proj) if proj else "Not found"
-    
-        mlflow.log_param("response_type", "rule-based")
-        mlflow.log_metric("output_length", len(answer))
-        mlflow.log_metric("answer_length", len(answer))
-        mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-        mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
-
-        return answer
-    
-    # LLM FALLBACK
-    
     prompt = f"""
-    You are a helpful AI assistant answering questions about a candidate's resume.
-    
-    Conversation History:
-    {history_text}
-    
-    Context:
-    {context}
-    
-    User Question:
-    {query}
-    
-    Rules:
-    - Answer ONLY from context
-    - Be concise but clear
-    - If not found → say "Not found"
-    - Do NOT hallucinate
-    
-    Answer:
-    """  
-                                   
-    answer = call_llm(prompt)
-    answer = clean_output(answer)
-    
-    # Log LL usage
-    mlflow.log_param("response_type","llm")
-    mlflow.log_metric("output_length", len(answer))
-    mlflow.log_metric("answer_length", len(answer))
-    mlflow.log_metric("is_found", 0 if answer == "Not found" else 1)
-    mlflow.log_metric("answer_coverage", answer_coverage(answer, context))
+Conversation History:
+{history_text}
 
-    if not answer or "error" in answer.lower():
-        return "Not Found"
-    
-    return answer.strip()
+Context:
+{context}
+
+Question:
+{query}
+
+Provide a professional answer.
+"""
+
+    # =========================
+    # LLM CALL
+    # =========================
+
+    answer = call_llm(prompt)
+
+    answer = clean_output(answer)
+
+    # =========================
+    # FINAL LOGGING
+    # =========================
+
+    mlflow.log_metric("answer_length", len(answer))
+
+    mlflow.log_metric(
+        "is_found",
+        0 if answer == "Not found" else 1
+    )
+
+    return answer
