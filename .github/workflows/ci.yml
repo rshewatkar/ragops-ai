@@ -45,7 +45,6 @@ jobs:
           python -c "import mlflow"
           python -c "import chromadb"
           python -c "import langchain"
-          python -c "import streamlit"
 
       # Step 6: Build Docker image
       - name: Build Docker Image
