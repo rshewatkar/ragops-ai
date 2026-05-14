@@ -1,5 +1,7 @@
 import streamlit as st
 import requests
+import os
+import re
 
 # PAGE CONFIG
 
@@ -11,7 +13,7 @@ st.set_page_config(
 
 # FASTAPI BACKEND URL
 
-API_URL = "http://ragops-api:8000/ask"
+API_URL = os.getenv("API_URL", "http://localhost:8000/ask")
 
 # For local testing without Docker, use:
 # API_URL = "http://localhost:8000/ask"
@@ -56,12 +58,19 @@ if "last_query" not in st.session_state:
 
 # FUNCTION TO CALL API
 
+def clean_display_text(text):
+    text = str(text or "")
+    text = text.replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n")
+    text = re.sub(r"</?b>", "", text)
+    return text.strip()
+
+
 def ask_backend(question):
     try:
         response = requests.post(
             API_URL,
             json={"query": question},
-            timeout=60
+            timeout=300
         )
 
         if response.status_code == 200:
@@ -107,20 +116,12 @@ if clear_btn:
 if st.session_state.answer:
 
     st.markdown("### 📌 Result")
+    answer = clean_display_text(st.session_state.answer)
 
-    st.markdown(f"""
-    <div style="
-        background-color:#f9f9f9;
-        padding:15px;
-        border-radius:10px;
-        border:1px solid #ddd;
-    ">
-        <b>Query:</b> {st.session_state.last_query} <br><br>
-
-        <b>Answer:</b><br>
-        {st.session_state.answer}
-    </div>
-    """, unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown(f"**Query:** {st.session_state.last_query}")
+        st.markdown("**Answer:**")
+        st.markdown(answer)
 
 
 # SUGGESTED QUESTIONS

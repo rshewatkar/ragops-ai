@@ -1,17 +1,26 @@
+version: "3.9"
+
 services:
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.12.1
-
+    image: ghcr.io/mlflow/mlflow:v2.17.0
     container_name: mlflow-server
 
     ports:
       - "5000:5000"
 
+    volumes:
+      - mlflow-data:/mlflow
+
     command: >
       mlflow server
       --host 0.0.0.0
       --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --default-artifact-root /mlflow/artifacts
+      --workers 2
+
+    restart: unless-stopped
 
   ragops-api:
     build:
@@ -23,24 +32,25 @@ services:
     ports:
       - "8000:8000"
 
+    volumes:
+      - ./data:/app/data
+      - chroma-db:/app/db
+
     environment:
-      - HF_TOKEN=${HF_TOKEN}
+      HF_TOKEN: ${HF_TOKEN}
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_EXPERIMENT_NAME: ragops-ai
+      RESUME_PATH: /app/data/Rahul_Shewatkar_Resume.pdf
+      CHROMA_DB_DIR: /app/db
+      ANONYMIZED_TELEMETRY: "False"
+      CHROMA_TELEMETRY: "False"
+      GIT_PYTHON_REFRESH: quiet
 
     depends_on:
       - mlflow
 
-  streamlit-ui:
-    build:
-      context: .
-      dockerfile: Dockerfile.streamlit
+    restart: unless-stopped
 
-    container_name: streamlit-ui
-
-    ports:
-      - "8501:8501"
-
-    environment:
-      - API_URL=http://ragops-api:8000
-
-    depends_on:
-      - ragops-api
+volumes:
+  mlflow-data:
+  chroma-db:
