@@ -13,7 +13,7 @@ st.set_page_config(
 
 # FASTAPI BACKEND URL
 
-API_URL = os.getenv("API_URL", "http://localhost:8000/ask")
+API_URL = os.getenv("API_URL","https://ragops-rag-api.onrender.com/ask")
 
 # For local testing without Docker, use:
 # API_URL = "http://localhost:8000/ask"

@@ -5,7 +5,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from app.rag_chain import create_vector_store, get_vector_store_count, ask_rag
 
-# ── Auto-ingest PDF on startup ───────────────────────────────────────────────
+#  Auto-ingest PDF on startup 
 RESUME_PATH = os.getenv("RESUME_PATH", "data/Rahul_Shewatkar_Resume.pdf")
 
 @asynccontextmanager
@@ -26,14 +26,23 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="RAGOPS-AI API", lifespan=lifespan)
 
-# ── Request/Response models ──────────────────────────────────────────────────
+# Request/Response models 
 class AskRequest(BaseModel):
     query: str
 
 class AskResponse(BaseModel):
     answer: str
 
-# ── Endpoints ────────────────────────────────────────────────────────────────
+# Root Endpoint 
+@app.get("/")
+def root():
+    return {
+        "message": "RAGOPS-AI API is running 🚀",
+        "docs": "/docs",
+        "health": "/health"
+    }
+    
+# Endpoints 
 @app.get("/health")
 def health():
     db_path = "/app/db"
