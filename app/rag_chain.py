@@ -34,9 +34,17 @@ _EXPERIMENT  = os.getenv("MLFLOW_EXPERIMENT_NAME", "ragops-ai")
 mlflow.set_tracking_uri(_MLFLOW_URI)
 
 try:
+    experiment = mlflow.get_experiment_by_name(_EXPERIMENT)
+
+    if experiment is None:
+        experiment_id = mlflow.create_experiment(_EXPERIMENT)
+        print(f"[MLflow] Created experiment: {_EXPERIMENT}")
+    else:
+        experiment_id = experiment.experiment_id
+
     mlflow.set_experiment(_EXPERIMENT)
+
 except Exception as e:
-    # MLflow unreachable at import time — warn but don't crash
     print(f"[MLflow] Could not set experiment '{_EXPERIMENT}': {e}")
 
 # =========================
