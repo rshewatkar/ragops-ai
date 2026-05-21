@@ -1,9 +1,42 @@
 # app/main.py
 import os
+import time
+
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, HTTPException
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import Response
+
 from pydantic import BaseModel
+
 from app.rag_chain import create_vector_store, get_vector_store_count, ask_rag
+
+from prometheus_client import (
+    Counter,
+    Histogram,
+    generate_latest,
+    CONTENT_TYPE_LATEST,
+)
+
+
+# PROMETHEUS METRICS
+
+REQUEST_COUNT = Counter(
+    "ragops_request_count",
+    "Total number of API requests",
+    ["method", "endpoint"]
+)
+
+REQUEST_LATENCY = Histogram(
+    "ragops_request_latency_seconds",
+    "Latency of API requests in seconds",
+    ["endpoint"]
+)
+
+ASK_REQUEST_COUNT = Counter(
+    "ragops_ask_requests_total",
+    "Total number of /ask requests"
+)
 
 #  Auto-ingest PDF on startup 
 RESUME_PATH = os.getenv("RESUME_PATH", "data/Rahul_Shewatkar_Resume.pdf")
@@ -21,10 +54,33 @@ async def lifespan(app: FastAPI):
             print("[Startup] Resume ingested. ChromaDB ready.")
     else:
         print(f"[Startup] WARNING: No resume found at {RESUME_PATH}")
-        print("[Startup] Call POST /upload to ingest manually.")
+        print("[Startup] Resume PDF not found.")
+        
     yield   # app runs here
 
 app = FastAPI(title="RAGOPS-AI API", lifespan=lifespan)
+
+# PROMETHEUS MIDDLEWARE
+
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+
+    start_time = time.time()
+
+    response = await call_next(request)
+
+    process_time = time.time() - start_time
+
+    REQUEST_COUNT.labels(
+        method=request.method,
+        endpoint=request.url.path
+    ).inc()
+
+    REQUEST_LATENCY.labels(
+        endpoint=request.url.path
+    ).observe(process_time)
+
+    return response
 
 # Request/Response models 
 class AskRequest(BaseModel):
@@ -39,7 +95,8 @@ def root():
     return {
         "message": "RAGOPS-AI API is running 🚀",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
+        "metrics": "/metrics"
     }
     
 # Endpoints 
@@ -54,18 +111,44 @@ def health():
         "resume_exists": os.path.exists(RESUME_PATH)
     }
 
+# =========================================================
+# ASK ENDPOINT
+# =========================================================
+
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest):
-    answer = ask_rag(request.query)
-    return AskResponse(answer=answer)
 
-@app.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)):
-    """Manually upload a PDF to ingest."""
-    import shutil
-    os.makedirs("/app/data", exist_ok=True)
-    save_path = f"/app/data/{file.filename}"
-    with open(save_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-    create_vector_store(save_path)
-    return {"status": "ingested", "file": file.filename}
+    ASK_REQUEST_COUNT.inc()
+
+    try:
+        answer = ask_rag(request.query)
+
+        return AskResponse(answer=answer)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+        
+# PROMETHEUS METRICS ENDPOINT
+
+@app.get("/metrics")
+def metrics():
+
+    return Response(
+        generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )
+
+
+
+
+
+
+
+
+
+
+
+
