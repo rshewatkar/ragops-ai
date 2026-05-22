@@ -123,6 +123,7 @@ def get_embeddings() -> HuggingFaceEmbeddings:
 
     return _EMBEDDINGS
 
+from prometheus_client import Gauge
 
 def get_vector_store() -> Chroma:
     """
@@ -137,13 +138,14 @@ def get_vector_store() -> Chroma:
         with _LOCK:
             if _VECTOR_STORE is None:
                 print(f"[ChromaDB] Connecting to: {get_db_path()}")
+
                 _VECTOR_STORE = Chroma(
                     collection_name=COLLECTION_NAME,
                     persist_directory=get_db_path(),
                     embedding_function=get_embeddings(),
                 )
+    
                 count = _VECTOR_STORE._collection.count()
-                print(f"[ChromaDB] Connected. {count} documents in collection.")
 
     return _VECTOR_STORE
 

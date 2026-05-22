@@ -11,8 +11,10 @@ from pydantic import BaseModel
 
 from app.rag_chain import create_vector_store, get_vector_store_count, ask_rag
 
+
 from prometheus_client import (
     Counter,
+    Gauge,
     Histogram,
     generate_latest,
     CONTENT_TYPE_LATEST,
@@ -38,6 +40,32 @@ ASK_REQUEST_COUNT = Counter(
     "Total number of /ask requests"
 )
 
+RAG_SUCCESS_COUNT = Counter(
+    "ragops_success_responses_total",
+    "Total successful RAG responses"
+)
+
+RAG_FAILURE_COUNT = Counter(
+    "ragops_failed_responses_total",
+    "Total failed RAG responses"
+)
+
+RAG_NOT_FOUND_COUNT = Counter(
+    "ragops_not_found_responses_total",
+    "Total 'Not found' responses"
+)
+
+RAG_PIPELINE_LATENCY = Histogram(
+    "ragops_pipeline_latency_seconds",
+    "Total RAG pipeline execution time"
+)
+
+VECTOR_DB_DOCUMENT_COUNT = Gauge(
+    "ragops_vector_db_documents",
+    "Total documents stored in ChromaDB"
+)
+
+
 #  Auto-ingest PDF on startup 
 RESUME_PATH = os.getenv("RESUME_PATH", "data/Rahul_Shewatkar_Resume.pdf")
 
@@ -46,11 +74,14 @@ async def lifespan(app: FastAPI):
     """Runs once when the container starts."""
     if os.path.exists(RESUME_PATH):
         count = get_vector_store_count()
+        VECTOR_DB_DOCUMENT_COUNT.set(count)
         if count > 0:
             print(f"[Startup] ChromaDB ready with {count} existing documents.")
         else:
             print(f"[Startup] Auto-ingesting resume from {RESUME_PATH}...")
             create_vector_store(RESUME_PATH)   # builds ChromaDB from PDF
+            count = get_vector_store_count()
+            VECTOR_DB_DOCUMENT_COUNT.set(count)
             print("[Startup] Resume ingested. ChromaDB ready.")
     else:
         print(f"[Startup] WARNING: No resume found at {RESUME_PATH}")
@@ -120,17 +151,30 @@ def ask(request: AskRequest):
 
     ASK_REQUEST_COUNT.inc()
 
+    start_time = time.time()
+
     try:
         answer = ask_rag(request.query)
+
+        latency = time.time() - start_time
+        RAG_PIPELINE_LATENCY.observe(latency)
+
+        if answer.strip().lower() == "not found":
+            RAG_NOT_FOUND_COUNT.inc()
+        else:
+            RAG_SUCCESS_COUNT.inc()
 
         return AskResponse(answer=answer)
 
     except Exception as e:
+
+        RAG_FAILURE_COUNT.inc()
+
         raise HTTPException(
             status_code=500,
             detail=str(e)
         )
-        
+       
 # PROMETHEUS METRICS ENDPOINT
 
 @app.get("/metrics")
