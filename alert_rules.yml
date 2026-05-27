@@ -1,0 +1,112 @@
+groups:
+
+  - name: ragops-alerts
+
+    rules:
+
+      # API DOWN ALERT
+      
+      - alert: RagopsAPIDown
+
+        expr: up{job="ragops-api"} == 0
+
+        for: 1m
+
+        labels:
+          severity: critical
+
+        annotations:
+          summary: "RAGOPS API is DOWN"
+          description: "FastAPI service is unreachable."
+
+
+      
+      # HIGH LATENCY ALERT
+      
+      - alert: HighAPILatency
+
+        expr: (
+          rate(ragops_request_latency_seconds_sum[1m])
+          /
+          rate(ragops_request_latency_seconds_count[1m])
+        ) > 2
+
+        for: 1m
+
+        labels:
+          severity: warning
+
+        annotations:
+          summary: "High API latency"
+          description: "Average API latency is above 2 seconds."
+
+
+      
+      # HIGH ERROR RATE ALERT
+      
+      - alert: HighErrorRate
+
+        expr: sum(increase(ragops_error_count[5m])) > 3
+
+        for: 1m
+
+        labels:
+          severity: critical
+
+        annotations:
+          summary: "Too many API errors"
+          description: "More than 3 API errors occurred in the last 5 minutes."
+
+
+      
+      # TOO MANY NOT FOUND RESPONSES
+      
+      - alert: TooManyNotFoundResponses
+
+        expr: increase(ragops_not_found_responses_total[5m]) > 10
+
+        for: 2m
+
+        labels:
+          severity: warning
+
+        annotations:
+          summary: "Too many 'Not found' responses"
+          description: "RAG system may not be retrieving proper context."
+
+
+      
+      # LOW VECTOR DB DOCUMENT COUNT
+      
+      - alert: VectorDBEmpty
+
+        expr: ragops_vector_db_documents < 1
+
+        for: 1m
+
+        labels:
+          severity: critical
+
+        annotations:
+          summary: "Vector DB is empty"
+          description: "No documents found in ChromaDB."
+
+
+      
+      # HIGH RAG PIPELINE LATENCY
+      
+      - alert: HighRAGPipelineLatency
+
+        expr: histogram_quantile(
+          0.95,
+          rate(ragops_pipeline_latency_seconds_bucket[5m])
+        ) > 5
+
+        for: 2m
+
+        labels:
+          severity: warning
+
+        annotations:
+          summary: "RAG pipeline is slow"
+          description: "95th percentile latency exceeded 5 seconds."

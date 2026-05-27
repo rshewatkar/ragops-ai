@@ -65,6 +65,11 @@ VECTOR_DB_DOCUMENT_COUNT = Gauge(
     "Total documents stored in ChromaDB"
 )
 
+ERROR_COUNT = Counter(
+    "ragops_error_count",
+    "Total number of API errors",
+    ["endpoint"]
+)
 
 #  Auto-ingest PDF on startup 
 RESUME_PATH = os.getenv("RESUME_PATH", "data/Rahul_Shewatkar_Resume.pdf")
@@ -168,7 +173,9 @@ def ask(request: AskRequest):
 
     except Exception as e:
 
-        RAG_FAILURE_COUNT.inc()
+        ERROR_COUNT.labels(
+            endpoint="/ask"
+        ).inc()
 
         raise HTTPException(
             status_code=500,
