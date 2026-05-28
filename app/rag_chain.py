@@ -20,15 +20,6 @@ warnings.filterwarnings(
     module="transformers.*",
 )
 
-# PROMETHEUS
-
-from prometheus_client import Gauge
-
-VECTOR_DB_DOCUMENT_COUNT = Gauge(
-    "ragops_vector_db_document_count",
-    "Total number of documents stored in ChromaDB"
-)
-
 # MLFLOW
 
 import mlflow
@@ -153,8 +144,7 @@ def get_vector_store() -> Chroma:
 
                 count = _VECTOR_STORE._collection.count()
 
-                VECTOR_DB_DOCUMENT_COUNT.set(count)
-
+                
                 print(
                     f"[ChromaDB] Connected. "
                     f"{count} documents in collection."
@@ -170,8 +160,7 @@ def get_vector_store_count() -> int:
 
         count = db._collection.count()
 
-        VECTOR_DB_DOCUMENT_COUNT.set(count)
-
+        
         return count
 
     except Exception as e:
@@ -222,8 +211,7 @@ def create_vector_store(file_path: str) -> Chroma:
 
     count = vector_db._collection.count()
 
-    VECTOR_DB_DOCUMENT_COUNT.set(count)
-
+    
     print(
         f"[ChromaDB] Vector store created "
         f"with {count} documents."
