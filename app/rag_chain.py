@@ -320,7 +320,7 @@ def route_query(query: str) -> tuple[str, int]:
     )):
         return (
             query +
-            " skills ML Libraries technologies tools languages",
+            " skills technologies tools frameworks libraries",
             6
         )
 
@@ -332,16 +332,50 @@ def route_query(query: str) -> tuple[str, int]:
         "role",
         "company"
     )):
-        return query + " experience internship work history", 6
+        return (
+            query +
+            " experience internship work history company",
+            6
+        )
 
     if any(w in q for w in (
         "project",
         "built",
+        "developed",
         "deployed",
-        "model",
-        "app"
+        "application",
+        "model"
     )):
-        return query + " projects machine learning deployed", 6
+        return (
+            query +
+            " projects machine learning deployment",
+            6
+        )
+
+    if any(w in q for w in (
+        "education",
+        "degree",
+        "college",
+        "university"
+    )):
+        return (
+            query +
+            " education degree qualification university",
+            4
+        )
+
+    if any(w in q for w in (
+        "contact",
+        "email",
+        "phone",
+        "linkedin",
+        "github"
+    )):
+        return (
+            query +
+            " contact email phone linkedin github",
+            3
+        )
 
     return query, 4
 
@@ -349,19 +383,82 @@ def route_query(query: str) -> tuple[str, int]:
 
 def fallback_answer(query: str, context: str) -> str:
 
+    q = query.lower()
+
     lines = unique_lines(
         re.split(r"[\n\r]+", context)
     )
 
-    snippets = lines[:5]
+    if "skill" in q or "technology" in q:
+        matches = [
+            line for line in lines
+            if any(
+                word in line.lower()
+                for word in [
+                    "python",
+                    "sql",
+                    "tensorflow",
+                    "xgboost",
+                    "langchain",
+                    "docker",
+                    "ml"
+                ]
+            )
+        ]
 
-    if not snippets:
+    elif "project" in q:
+        matches = [
+            line for line in lines
+            if any(
+                word in line.lower()
+                for word in [
+                    "project",
+                    "built",
+                    "developed",
+                    "deployed"
+                ]
+            )
+        ]
+
+    elif "experience" in q:
+        matches = [
+            line for line in lines
+            if any(
+                word in line.lower()
+                for word in [
+                    "experience",
+                    "intern",
+                    "company",
+                    "worked"
+                ]
+            )
+        ]
+
+    elif "education" in q:
+        matches = [
+            line for line in lines
+            if any(
+                word in line.lower()
+                for word in [
+                    "education",
+                    "degree",
+                    "college",
+                    "university"
+                ]
+            )
+        ]
+
+    else:
+        matches = lines[:5]
+
+    if not matches:
         return "Not found"
 
     return "\n".join(
-        f"- {snippet}" for snippet in snippets
+        f"- {line}"
+        for line in matches[:5]
     )
-
+    
 # MLFLOW LOGGER
 
 def _log_to_mlflow(params: dict, metrics: dict):
@@ -431,14 +528,25 @@ def ask_rag(query: str, chat_history: list = None) -> str:
     rel_score = relevance_score(query, context)
 
     prompt = f"""
-Context:
-{context}
-
-Question:
-{query}
-
-Provide a concise professional answer.
-"""
+    You are an AI Resume Assistant.
+    
+    Answer ONLY using the provided resume context.
+    
+    Rules:
+    - Be specific.
+    - Mention exact skills, projects, companies, tools or achievements when available.
+    - Do not make up information.
+    - If information is missing, reply exactly: Not found.
+    - Answer in the format most suitable for the question.
+    
+    Resume Context:
+    {context}
+    
+    User Question:
+    {query}
+    
+    Answer:
+    """
 
     try:
 

@@ -34,7 +34,7 @@ This project solves that problem by:
 ---
 ![Architecture Diagram](/docs/architecture.png.png "Project Architecture")
 
-🛠 Tech Stack
+🛠️ Tech Stack
 ---
 **AI / LLM**
 * LangChain
@@ -63,3 +63,64 @@ This project solves that problem by:
 **Testing**
 * Pytest
 * Locust
+
+### 📂 Project Structure
+---
+
+```
+ragops-ai/
+│
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       └── cd.yml
+│
+├── app/
+│   ├── __init__.py
+│   ├── main.py                 # FastAPI application
+│   ├── rag_chain.py            # RAG pipeline
+│   └── streamlit_ui.py         # Streamlit frontend
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_main.py
+│   ├── test_rag_chain.py
+│   ├── load_test.py            # Stress testing
+│   └── system_validation.py    # End-to-end validation
+│
+├── data/
+│   └── Rahul_Shewatkar_Resume.pdf
+│
+├── docs/
+│   └── architecture.png.png
+│
+├── evaluation/
+│   └── compare_runs.py         # MLflow experiment comparison
+│
+├── notebooks/
+│   ├── __init__.py
+│   ├── test_chunking.py
+│   ├── test_ollama.py
+│   └── test_vector_db.py
+│
+├── Dockerfile
+├── Dockerfile.mlflow
+├── docker-compose.yml
+│
+├── prometheus.yml
+├── alert_rules.yml
+│
+├── Configuration
+│   ├── requirements-api.txt
+│   ├── requirements-dev.txt
+│   ├── pytest.ini
+│   ├── runtime.txt
+│   └── test_env.py
+│
+├── rag_experiments.csv           # Experiment Tracking
+│
+├── .dockerignore
+├── .gitignore
+└── README.md
+
+```
