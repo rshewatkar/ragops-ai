@@ -79,9 +79,9 @@ EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 LLM_MODEL = "deepseek-ai/DeepSeek-V4-Pro:novita"
 
-CHUNK_SIZE = 1000
+CHUNK_SIZE = 400
 
-CHUNK_OVERLAP = 200
+CHUNK_OVERLAP = 50
 
 COLLECTION_NAME = "ragops-resume"
 
@@ -181,16 +181,32 @@ def load_and_chunk_pdf(file_path: str) -> list:
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
     )
-
+    
     chunks = splitter.split_documents(documents)
 
+    for chunk in chunks:
+    
+        text = chunk.page_content.lower()
+    
+        if "project" in text:
+            chunk.metadata["section"] = "projects"
+    
+        elif "experience" in text or "internship" in text:
+            chunk.metadata["section"] = "experience"
+    
+        elif "skill" in text:
+            chunk.metadata["section"] = "skills"
+    
+        else:
+            chunk.metadata["section"] = "other"
+    
     print(
         f"[PDF] Loaded {len(documents)} pages "
         f"→ {len(chunks)} chunks"
     )
-
+    
     return chunks
-
+   
 # CREATE VECTOR STORE
 
 def create_vector_store(file_path: str) -> Chroma:
@@ -496,11 +512,22 @@ def ask_rag(query: str, chat_history: list = None) -> str:
     retrieval_query, k = route_query(query)
 
     db = get_vector_store()
+    
+    if "project" in query.lower():
 
-    docs = db.similarity_search(
+     docs = db.similarity_search(
         retrieval_query,
-        k=k
-    )
+        k=8,
+        filter={"section": "projects"}
+     )
+
+    else:
+
+     docs = db.similarity_search(
+         retrieval_query,
+         k=k
+      )
+
 
     if not docs:
 

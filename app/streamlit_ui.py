@@ -128,7 +128,10 @@ if st.session_state.answer:
 
 st.divider()
 
-st.markdown("### 💡 Try these:")
+st.markdown("""
+### 💡 Suggested Questions
+Click any question below to test the assistant.
+""")
 
 suggestions = [
     "What are his skills?",
@@ -153,6 +156,28 @@ for i, q in enumerate(suggestions):
 
             st.rerun()
 
+with st.sidebar:
+
+    st.title("📄 Resume Assistant")
+
+    st.markdown("""
+ ### About
+ 
+ RAG-powered AI Resume Assistant
+ 
+ Built with:
+ 
+ - FastAPI
+ - LangChain
+ - ChromaDB
+ - Hugging Face
+ - MLflow
+ - Docker
+     """)
+st.sidebar.success("✅ Resume Loaded")
+st.sidebar.info("🤖 DeepSeek V4")
+st.sidebar.info("📚 ChromaDB")
+st.sidebar.info("🚀 FastAPI Backend")
 
 # FOOTER
 

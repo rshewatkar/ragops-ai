@@ -8,7 +8,12 @@ class RagOpsUser(HttpUser):
     def ask_question(self):
 
         payload = {
-            "query": "What are Rahul's machine learning skills?"
+            "query": "What are Rahul's machine learning skills?",
+            "query":"What are his skills?",
+            "query":"What is his experience?",
+            "query":"What projects has he built?",
+            "query":"Tell me about his profile",
+            "query":"Which ML libraries does he know?"
         }
 
         self.client.post(
